@@ -18,6 +18,44 @@ import { getBanks, getBank } from "./user.actions";
 // Get multiple bank accounts
 export const getAccounts = async ({ userId }: getAccountsProps) => {
   try {
+    // Check for demo mode - return mock account data
+    if (userId === "demo-user-id") {
+      const mockAccounts = [
+        {
+          id: "demo-account-1",
+          availableBalance: 5000.00,
+          currentBalance: 5250.00,
+          institutionId: "demo-institution",
+          name: "Demo Checking Account",
+          officialName: "Demo Bank Checking",
+          mask: "1234",
+          type: "depository",
+          subtype: "checking",
+          appwriteItemId: "demo-bank-1",
+          sharaebleId: "demo-shareable-1"
+        },
+        {
+          id: "demo-account-2",
+          availableBalance: 12500.00,
+          currentBalance: 12500.00,
+          institutionId: "demo-institution",
+          name: "Demo Savings Account",
+          officialName: "Demo Bank Savings",
+          mask: "5678",
+          type: "depository",
+          subtype: "savings",
+          appwriteItemId: "demo-bank-2",
+          sharaebleId: "demo-shareable-2"
+        }
+      ];
+
+      return parseStringify({
+        data: mockAccounts,
+        totalBanks: 2,
+        totalCurrentBalance: 17750.00
+      });
+    }
+
     // get banks from db
     const banks = await getBanks({ userId });
 
@@ -115,7 +153,7 @@ export const getAccount = async ({ appwriteItemId }: getAccountProps) => {
     };
 
     // sort transactions by date such that the most recent transaction is first
-      const allTransactions = [...transactions, ...transferTransactions].sort(
+    const allTransactions = [...transactions, ...transferTransactions].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
 

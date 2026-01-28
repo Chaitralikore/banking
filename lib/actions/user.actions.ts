@@ -281,6 +281,22 @@ export const exchangePublicToken = async ({
 
 export const getBanks = async ({ userId }: getBanksProps) => {
   try {
+    // Check for demo mode - return mock bank data
+    const demoMode = cookies().get("demo-mode");
+    if (demoMode?.value === "true" || userId === "demo-user-id") {
+      return [
+        {
+          $id: "demo-bank-1",
+          userId: "demo-user-id",
+          bankId: "demo-bank-id",
+          accountId: "demo-account-1",
+          accessToken: "demo-access-token",
+          fundingSourceUrl: "https://demo.dwolla.com/funding",
+          shareableId: "demo-shareable-1"
+        }
+      ];
+    }
+
     const { database } = await createAdminClient();
 
     const banks = await database.listDocuments(
