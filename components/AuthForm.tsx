@@ -22,33 +22,35 @@ import CustomInput from './CustomInput';
 import { authFormSchema } from '@/lib/utils';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { getLoggedInUser, signIn, signUp } from '@/lib/actions/user.actions';
+import { getLoggedInUser, signIn, signUp, enableDemoMode } from '@/lib/actions/user.actions';
 import PlaidLink from './PlaidLink';
 
 const AuthForm = ({ type }: { type: string }) => {
   const router = useRouter();
   const [user, setUser] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const formSchema = authFormSchema(type);
 
-    // 1. Define your form.
-    const form = useForm<z.infer<typeof formSchema>>({
-      resolver: zodResolver(formSchema),
-      defaultValues: {
-        email: "",
-        password:''
-      },
-    })
-  
-    // 2. Define a submit handler.
-    const onSubmit = async (data: z.infer<typeof formSchema>) => {
-      setIsLoading(true)
-      
-      try {
+  // 1. Define your form.
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      email: "",
+      password: ''
+    },
+  })
+
+  // 2. Define a submit handler.
+  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
       // Sign up with Appwrite & create plaid token
 
-      if(type === 'sign-up') {
+      if (type === 'sign-up') {
         const userData = {
           firstName: data.firstName!,
           lastName: data.lastName!,
@@ -67,16 +69,34 @@ const AuthForm = ({ type }: { type: string }) => {
         setUser(newUser);
       }
 
-      if(type === 'sign-in') {
+      if (type === 'sign-in') {
         const response = await signIn({
           email: data.email,
           password: data.password,
         })
 
-        if(response) router.push('/')
+        if (response) router.push('/')
       }
-    } catch (error) {
-      console.log(error);
+    } catch (error: any) {
+      console.log('Auth error:', error);
+      const errorMessage = error?.message || error?.toString() || '';
+      const errorType = error?.type || error?.code || '';
+
+      // Check for user already exists error
+      if (errorType === 'user_already_exists' ||
+        errorMessage.toLowerCase().includes('user with the same email already exists') ||
+        errorMessage.toLowerCase().includes('already exists')) {
+        setError('An account with this email already exists. Please sign in instead.');
+      } else if (errorMessage.toLowerCase().includes('invalid credentials') ||
+        errorMessage.toLowerCase().includes('invalid password') ||
+        errorMessage.toLowerCase().includes('wrong password')) {
+        setError('Invalid email or password. Please try again.');
+      } else if (errorMessage.toLowerCase().includes('dwolla')) {
+        setError('Payment service error. Please try Demo Mode to continue.');
+      } else {
+        // Show the actual error for debugging
+        setError(`Error: ${errorMessage || 'Something went wrong. Please try again or use Demo Mode.'}`);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -86,61 +106,69 @@ const AuthForm = ({ type }: { type: string }) => {
     <section className="auth-form">
       <header className='flex flex-col gap-5 md:gap-8'>
         <Link href="/" className="cursor-pointer flex items-center gap-1">
-          <Image 
+          <Image
             src="/icons/logo.svg"
             width={34}
             height={34}
             alt="Horizon logo"
           />
-           <h1 className="text-26 font-ibm-plex-serif font-bold text-black-1">Horizon</h1>
+          <h1 className="text-26 font-ibm-plex-serif font-bold text-black-1">Horizon</h1>
         </Link>
 
         <div className="flex flex-col gap-1 md:gap-3">
           <h1 className="text-24 lg:text-36 font-semibold text-gray-900">
-            {user 
+            {user
               ? 'Link Account'
               : type === 'sign-in'
                 ? 'Sign In'
                 : 'Sign Up'
             }
             <p className="text-16 font-normal text-gray-600">
-                {user 
-                  ? 'Link your account to get started'
-                  : 'Please enter your details'
-                }
-              </p> 
+              {user
+                ? 'Link your account to get started'
+                : 'Please enter your details'
+              }
+            </p>
           </h1>
         </div>
       </header>
-      {user ? ( 
+      {user ? (
         <div className="flex flex-col gap-4">
           <PlaidLink user={user} variant="primary" />
-      </div>
-      ): ( 
+        </div>
+      ) : (
         <>
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500 bg-red-50 p-3 text-sm text-red-700">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              {error}
+            </div>
+          )}
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
               {type === 'sign-up' && (
                 <>
                   <div className="flex gap-4">
-                  <CustomInput control={form.control} name='firstName' label="First Name" placeholder='Enter your first name' />
-                  <CustomInput control={form.control} name='lastName' label="Last Name" placeholder='Enter your last name' />
-                  </div>                 
+                    <CustomInput control={form.control} name='firstName' label="First Name" placeholder='Enter your first name' />
+                    <CustomInput control={form.control} name='lastName' label="Last Name" placeholder='Enter your last name' />
+                  </div>
                   <CustomInput control={form.control} name='address1' label="Address" placeholder='Enter your address' />
                   <CustomInput control={form.control} name='city' label="City" placeholder='Enter your city' />
                   <div className="flex gap-4">
-                  <CustomInput control={form.control} name='state' label="State" placeholder='Example: Maharashtra' />
-                  <CustomInput control={form.control} name='postalCode' label="Postal Code" placeholder='Example: 400001' />
+                    <CustomInput control={form.control} name='state' label="State" placeholder='Example: Maharashtra' />
+                    <CustomInput control={form.control} name='postalCode' label="Postal Code" placeholder='Example: 400001' />
                   </div>
                   <div className="flex gap-4">
-                  <CustomInput control={form.control} name='dateOfBirth' label="Date of Birth" placeholder='YYYY-MM-DD' />
-                  <CustomInput control={form.control} name='ssn' label="SSN" placeholder='Example: 1234' />
-                  </div>                                   
+                    <CustomInput control={form.control} name='dateOfBirth' label="Date of Birth" placeholder='YYYY-MM-DD' />
+                    <CustomInput control={form.control} name='ssn' label="SSN" placeholder='Example: 1234' />
+                  </div>
                 </>
-              )}              
+              )}
               <CustomInput control={form.control} name='email' label="Email" placeholder='Enter your email' />
 
-              <CustomInput control={form.control} name='password' label="Password" placeholder='Enter your password' /> 
+              <CustomInput control={form.control} name='password' label="Password" placeholder='Enter your password' />
 
               <div className="flex flex-col gap-4">
                 <Button type="submit" disabled={isLoading} className="form-btn">
@@ -152,22 +180,35 @@ const AuthForm = ({ type }: { type: string }) => {
                   ) : type === 'sign-in'
                     ? 'Sign In' : 'Sign Up'}
                 </Button>
+
+                {/* Demo Mode Button */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="form-btn bg-gray-100 hover:bg-gray-200 text-gray-700 border-gray-300"
+                  onClick={async () => {
+                    await enableDemoMode();
+                    router.push('/');
+                  }}
+                >
+                  Demo Mode (Skip {type === 'sign-in' ? 'Sign-In' : 'Sign-Up'})
+                </Button>
               </div>
             </form>
-         </Form>
+          </Form>
 
-         <footer className="flex justify-center gap-1">
-          <p className="text-14 font-normal text-gray-600">
-            {type === 'sign-in'
-            ? "Don't have an account?"
-            : "Already have an account?"}
-          </p>
-          <Link href={type === 'sign-in' ? '/sign-up' : '/sign-in'} className="form-link">
-            {type === 'sign-in' ? 'Sign-up' : 'Sign-in'}
-          </Link>
-         </footer>
+          <footer className="flex justify-center gap-1">
+            <p className="text-14 font-normal text-gray-600">
+              {type === 'sign-in'
+                ? "Don't have an account?"
+                : "Already have an account?"}
+            </p>
+            <Link href={type === 'sign-in' ? '/sign-up' : '/sign-in'} className="form-link">
+              {type === 'sign-in' ? 'Sign-up' : 'Sign-in'}
+            </Link>
+          </footer>
         </>
-      )} 
+      )}
     </section>
   )
 }

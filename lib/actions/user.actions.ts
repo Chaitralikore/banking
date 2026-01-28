@@ -32,50 +32,50 @@ export const getUserInfo = async ({ userId }: getUserInfoProps) => {
   }
 }
 
-export const signIn = async ({ email, password }: signInProps) => {  
-  try {  
-    const { account } = await createAdminClient();  
-    const session = await account.createEmailPasswordSession(email, password);  
+export const signIn = async ({ email, password }: signInProps) => {
+  try {
+    const { account } = await createAdminClient();
+    const session = await account.createEmailPasswordSession(email, password);
 
-    cookies().set("appwrite-session", session.secret, {  
-      path: "/",  
-      httpOnly: true,  
-      sameSite: "strict",  
+    cookies().set("appwrite-session", session.secret, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "strict",
       secure: process.env.NODE_ENV === 'production', // Use secure only in production  
-    });  
+    });
 
-    const user = await getUserInfo({ userId: session.userId }) 
+    const user = await getUserInfo({ userId: session.userId })
 
     return parseStringify(user);                     // Return session or relevant data  
-  } catch (error) {  
-    console.error('Sign-in Error:', error);  
-    throw new Error('Failed to sign in. Please check your credentials.');  
-  }  
+  } catch (error) {
+    console.error('Sign-in Error:', error);
+    throw new Error('Failed to sign in. Please check your credentials.');
+  }
 }
 
 export const signUp = async ({ password, ...userData }: SignUpParams) => {
   const { email, firstName, lastName } = userData;
-  
+
   let newUserAccount;
 
   try {
     const { account, database } = await createAdminClient();
 
     newUserAccount = await account.create(
-      ID.unique(), 
-      email, 
-      password, 
+      ID.unique(),
+      email,
+      password,
       `${firstName} ${lastName}`
     );
 
-    if(!newUserAccount) throw new Error('Error creating user')
+    if (!newUserAccount) throw new Error('Error creating user')
 
     const dwollaCustomerUrl = await createDwollaCustomer({
       ...userData,
       type: 'personal'
     })
 
-    if(!dwollaCustomerUrl) throw new Error('Error creating Dwolla customer')
+    if (!dwollaCustomerUrl) throw new Error('Error creating Dwolla customer')
 
     const dwollaCustomerId = extractCustomerIdFromUrl(dwollaCustomerUrl);
 
@@ -103,15 +103,37 @@ export const signUp = async ({ password, ...userData }: SignUpParams) => {
     return parseStringify(newUser);
   } catch (error) {
     console.error('Error', error);
+    throw error;
   }
 }
 
 export async function getLoggedInUser() {
   try {
+    // Check for demo mode first
+    const demoMode = cookies().get("demo-mode");
+    if (demoMode?.value === "true") {
+      return {
+        $id: "demo-user-id",
+        email: "demo@example.com",
+        firstName: "Demo",
+        lastName: "User",
+        name: "Demo User",
+        address1: "123 Demo Street",
+        city: "Demo City",
+        state: "CA",
+        postalCode: "12345",
+        dateOfBirth: "1990-01-01",
+        ssn: "1234",
+        userId: "demo-user-id",
+        dwollaCustomerId: "demo-dwolla-id",
+        dwollaCustomerUrl: "https://demo.dwolla.com"
+      };
+    }
+
     const { account } = await createSessionClient();
     const result = await account.get();
 
-    const user = await getUserInfo({ userId: result.$id})
+    const user = await getUserInfo({ userId: result.$id })
 
     return parseStringify(user);
   } catch (error) {
@@ -124,11 +146,24 @@ export const logoutAccount = async () => {
     const { account } = await createSessionClient();
 
     cookies().delete('appwrite-session');
+    cookies().delete('demo-mode');
 
     await account.deleteSession('current');
   } catch (error) {
+    // Also delete demo-mode cookie on logout error
+    cookies().delete('demo-mode');
     return null;
   }
+}
+
+export const enableDemoMode = async () => {
+  cookies().set("demo-mode", "true", {
+    path: "/",
+    httpOnly: true,
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === 'production',
+  });
+  return true;
 }
 
 export const createLinkToken = async (user: User) => {
@@ -194,7 +229,7 @@ export const exchangePublicToken = async ({
 
     const accessToken = response.data.access_token;
     const itemId = response.data.item_id;
-    
+
     // Get account information from Plaid using the access token
     const accountsResponse = await plaidClient.accountsGet({
       access_token: accessToken,
@@ -212,13 +247,13 @@ export const exchangePublicToken = async ({
     const processorTokenResponse = await plaidClient.processorTokenCreate(request);
     const processorToken = processorTokenResponse.data.processor_token;
 
-     // Create a funding source URL for the account using the Dwolla customer ID, processor token, and bank name
-     const fundingSourceUrl = await addFundingSource({
+    // Create a funding source URL for the account using the Dwolla customer ID, processor token, and bank name
+    const fundingSourceUrl = await addFundingSource({
       dwollaCustomerId: user.dwollaCustomerId,
       processorToken,
       bankName: accountData.name,
     });
-    
+
     // If the funding source URL is not created, throw an error
     if (!fundingSourceUrl) throw Error;
 
@@ -243,7 +278,7 @@ export const exchangePublicToken = async ({
     console.error("An error occurred while creating exchanging token:", error);
   }
 }
- 
+
 export const getBanks = async ({ userId }: getBanksProps) => {
   try {
     const { database } = await createAdminClient();
@@ -286,7 +321,7 @@ export const getBankByAccountId = async ({ accountId }: getBankByAccountIdProps)
       [Query.equal('accountId', [accountId])]
     )
 
-    if(bank.total !== 1) return null;
+    if (bank.total !== 1) return null;
 
     return parseStringify(bank.documents[0]);
   } catch (error) {
